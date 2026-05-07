@@ -112,4 +112,75 @@ with tab_client:
         
         # סינון שעות שעברו
         if d == now_il.date():
-            current_time_str = no
+            current_time_str = now_il.strftime("%H:%M")
+            available = [s for s in available if s > current_time_str]
+        
+        if not available:
+            st.error("אין תורים פנויים לזמן שנבחר.")
+        else:
+            with st.form("book_form", clear_on_submit=True):
+                c_name = st.text_input("שם מלא")
+                c_phone = st.text_input("טלפון")
+                c_slot = st.selectbox("שעה פנויה", available)
+                submit = st.form_submit_button("אשר תור (לחץ פעם אחת)")
+                
+                if submit:
+                    if c_name and c_phone:
+                        # שמירה ל-CSV
+                        new_row = pd.DataFrame([{"שם": c_name, "טלפון": c_phone, "תאריך": str(d), "שעה": c_slot, "סטטוס": "פעיל"}])
+                        df = pd.concat([df, new_row], ignore_index=True)
+                        save_data(df)
+                        
+                        # שמירת פרטי התור ב-Session State כדי להציג הודעת אישור
+                        st.session_state.last_booking = {
+                            "name": c_name,
+                            "date": d.strftime("%d/%m/%Y"),
+                            "time": c_slot
+                        }
+                        st.rerun()
+                    else:
+                        st.warning("בבקשה מלא את כל הפרטים.")
+
+# --- ממשק ניהול (אוהד) ---
+with tab_admin:
+    pwd = st.text_input("סיסמת מנהל", type="password")
+    if pwd == "1234":
+        view_d = st.date_input("תאריך לניהול", value=get_israel_time().date())
+        day_slots = df[df["תאריך"] == str(view_d)]
+        
+        st.subheader(f"תורים ליום {view_d.strftime('%d/%m/%Y')}")
+        if not day_slots.empty:
+            # תצוגה נקייה יותר של הטבלה
+            display_df = day_slots[["שעה", "שם", "טלפון", "סטטוס"]].sort_values("שעה")
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("אין תורים מוזמנים ליום זה.")
+
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("🔒 חסימת שעה")
+            h_to_block = st.selectbox("בחר שעה", generate_slots(view_d))
+            if st.button("חסום שעה"):
+                new_block = pd.DataFrame([{"שם": "חסום", "טלפון": "---", "תאריך": str(view_d), "שעה": h_to_block, "סטטוס": "חסום"}])
+                df = pd.concat([df, new_block], ignore_index=True)
+                save_data(df)
+                st.rerun()
+        with col2:
+            st.write("🚫 סגירת יום")
+            if st.button("סגור יום שלם"):
+                all_day = generate_slots(view_d)
+                new_blocks = pd.DataFrame([{"שם": "סגור", "טלפון": "---", "תאריך": str(view_d), "שעה": s, "סטטוס": "חסום"} for s in all_day])
+                df = pd.concat([df, new_blocks], ignore_index=True)
+                save_data(df)
+                st.rerun()
+        
+        st.markdown("---")
+        st.write("🗑️ ביטול תור / פתיחת חסימה")
+        active = day_slots[day_slots["סטטוס"].isin(["פעיל", "חסום"])]
+        if not active.empty:
+            t_to_cancel = st.selectbox("בחר שעה לביטול", active["שעה"])
+            if st.button("בטל תור/חסימה"):
+                df.loc[(df["תאריך"] == str(view_d)) & (df["שעה"] == t_to_cancel), "סטטוס"] = "בוטל"
+                save_data(df)
+                st.rerun()
