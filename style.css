@@ -1,0 +1,21 @@
+/* עיצוב כללי למספרה */
+.main {
+    background-color: #1a1a1a;
+    color: #ffffff;
+}
+.stButton>button {
+    background-color: #d4af37; /* צבע זהב */
+    color: black;
+    font-weight: bold;
+    border-radius: 10px;
+    border: none;
+    width: 100%;
+}
+.stTextInput>div>div>input {
+    background-color: #333;
+    color: white;
+}
+h1, h2, h3 {
+    color: #d4af37 !important;
+    text-align: center;
+}
