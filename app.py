@@ -9,7 +9,11 @@ NAME = "אוהד - עיצוב שיער"
 ADDRESS = "נחום שריג 33, באר שבע"
 DB_FILE = "appointments.csv"
 
-# הגדרת שעות פעילות מדויקות (א-ה 9:00-20:00, ו' 9:00-15:00)
+# פונקציה לקבלת השעה הנוכחית בישראל (UTC+3)
+def get_israel_time():
+    return datetime.utcnow() + timedelta(hours=3)
+
+# הגדרת שעות פעילות
 def get_working_hours(selected_date):
     day = selected_date.weekday() # 6=Sun, 0=Mon... 4=Fri, 5=Sat
     if day == 5: # שבת סגור
@@ -41,12 +45,9 @@ def generate_slots(selected_date):
 # --- עיצוב דף ---
 st.set_page_config(page_title=NAME, page_icon="✂️")
 
-# הזרקת CSS לעיצוב יוקרתי
 st.markdown("""
 <style>
     .main { background-color: #fdfdfd; }
-    .stTabs [data-baseweb="tab-list"] { gap: 24px; justify-content: center; }
-    .stTabs [data-baseweb="tab"] { font-weight: bold; border-radius: 4px 4px 0 0; padding: 10px 20px; }
     .waze-btn {
         background-color: #33ccff; color: white !important; padding: 12px 24px;
         text-decoration: none; border-radius: 30px; font-weight: bold;
@@ -56,13 +57,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- לוגו צללית מקצועי (שפם ומספריים) ---
+# לוגו
 st.markdown(f"""
 <div class="logo-container">
-    <!-- צללית שפם של פעם ומספריים -->
     <svg width="120" height="120" viewBox="0 0 100 100" fill="black" xmlns="http://www.w3.org/2000/svg">
-        <path d="M50 10 L55 40 L45 40 Z M35 30 L45 45 L40 50 L30 35 Z M65 30 L55 45 L60 50 L70 35 Z" /> <!-- סמל מספריים מופשט -->
-        <path d="M20 60 C 20 50, 45 50, 50 60 C 55 50, 80 50, 80 60 C 80 75, 60 70, 50 80 C 40 70, 20 75, 20 60" /> <!-- שפם עגול קלאסי -->
+        <path d="M50 10 L55 40 L45 40 Z M35 30 L45 45 L40 50 L30 35 Z M65 30 L55 45 L60 50 L70 35 Z" />
+        <path d="M20 60 C 20 50, 45 50, 50 60 C 55 50, 80 50, 80 60 C 80 75, 60 70, 50 80 C 40 70, 20 75, 20 60" />
     </svg>
     <h1 style='margin-top: 0; font-family: serif; letter-spacing: 2px;'>{NAME}</h1>
 </div>
@@ -78,20 +78,30 @@ tab_client, tab_admin = st.tabs(["📅 הזמנת תור", "🔐 ניהול מס
 
 # --- ממשק לקוח ---
 with tab_client:
+    now_il = get_israel_time()
     st.markdown("<h4 style='text-align: center;'>בחר זמן לתספורת</h4>", unsafe_allow_html=True)
-    d = st.date_input("תאריך", min_value=datetime.today())
+    
+    # בחירת תאריך
+    d = st.date_input("תאריך", min_value=now_il.date())
     
     all_slots = generate_slots(d)
+    
+    # 1. סינון תורים שכבר תפוסים ב-CSV
     booked = df[(df["תאריך"] == str(d)) & (df["סטטוס"].isin(["פעיל", "חסום"]))]["שעה"].tolist()
     available = [s for s in all_slots if s not in booked]
     
+    # 2. סינון שעות שעברו (רק אם נבחר התאריך של היום)
+    if d == now_il.date():
+        current_time_str = now_il.strftime("%H:%M")
+        available = [s for s in available if s > current_time_str]
+    
     if not available:
-        st.error("אין תורים פנויים ביום זה")
+        st.error("אין תורים פנויים לשארית היום.")
     else:
         with st.form("book_form"):
             name = st.text_input("שם מלא")
             phone = st.text_input("טלפון")
-            slot = st.selectbox("שעה (תור של 20 דקות)", available)
+            slot = st.selectbox("שעה פנויה", available)
             if st.form_submit_button("אשר תור"):
                 if name and phone:
                     new_row = pd.DataFrame([{"שם": name, "טלפון": phone, "תאריך": str(d), "שעה": slot, "סטטוס": "פעיל"}])
@@ -107,8 +117,7 @@ with tab_client:
 with tab_admin:
     pwd = st.text_input("סיסמת מנהל", type="password")
     if pwd == "1234":
-        st.subheader("יומן תורים")
-        view_d = st.date_input("תאריך לניהול", value=datetime.today())
+        view_d = st.date_input("תאריך לניהול", value=get_israel_time().date())
         day_slots = df[df["תאריך"] == str(view_d)]
         
         if not day_slots.empty:
